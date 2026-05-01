@@ -568,6 +568,9 @@ document.addEventListener("DOMContentLoaded", () => {
           </div>
         `
         }
+        <button class="share-button" data-activity="${name}" aria-label="Share this activity">
+          <span class="share-icon">🔗</span> Share
+        </button>
       </div>
     `;
 
@@ -586,6 +589,12 @@ document.addEventListener("DOMContentLoaded", () => {
         });
       }
     }
+
+    // Add click handler for share button
+    const shareButton = activityCard.querySelector(".share-button");
+    shareButton.addEventListener("click", () => {
+      shareActivity(name, details);
+    });
 
     activitiesList.appendChild(activityCard);
   }
@@ -855,6 +864,60 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
+  // Share an activity using the Web Share API or clipboard fallback
+  async function shareActivity(name, details) {
+    const url = `${location.origin}${location.pathname}?activity=${encodeURIComponent(name)}`;
+    const description = details.description ? ` ${details.description} —` : "";
+    const text = `Check out "${name}" at Mergington High School!${description} ${formatSchedule(details)}`;
+
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: name, text, url });
+        return;
+      } catch (err) {
+        // User cancelled or API unavailable — fall through to clipboard
+        if (err.name === "AbortError") return;
+      }
+    }
+
+    try {
+      await navigator.clipboard.writeText(url);
+      showMessage(`Link copied to clipboard! Share it with your friends.`, "success");
+    } catch {
+      showMessage(`Share this link: ${url}`, "info");
+    }
+  }
+
+  // Highlight an activity card that matches the ?activity= URL parameter
+  function highlightActivityFromUrl() {
+    const params = new URLSearchParams(location.search);
+    const activityName = params.get("activity");
+    if (!activityName) return;
+
+    // Poll until the card is rendered (activities load asynchronously)
+    // Up to MAX_HIGHLIGHT_ATTEMPTS × HIGHLIGHT_POLL_INTERVAL_MS = 6 seconds
+    const MAX_HIGHLIGHT_ATTEMPTS = 20;
+    const HIGHLIGHT_POLL_INTERVAL_MS = 300;
+    let attempts = 0;
+
+    const tryHighlight = () => {
+      const cards = activitiesList.querySelectorAll(".activity-card");
+      for (const card of cards) {
+        const heading = card.querySelector("h4");
+        if (heading && heading.textContent.trim() === activityName) {
+          card.classList.add("highlighted-activity");
+          card.scrollIntoView({ behavior: "smooth", block: "center" });
+          return;
+        }
+      }
+      if (++attempts < MAX_HIGHLIGHT_ATTEMPTS) {
+        setTimeout(tryHighlight, HIGHLIGHT_POLL_INTERVAL_MS);
+      }
+    };
+
+    tryHighlight();
+  }
+
   // Expose filter functions to window for future UI control
   window.activityFilters = {
     setDayFilter,
@@ -865,4 +928,5 @@ document.addEventListener("DOMContentLoaded", () => {
   checkAuthentication();
   initializeFilters();
   fetchActivities();
+  highlightActivityFromUrl();
 });
